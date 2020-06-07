@@ -1,4 +1,4 @@
-module example.com/sergrey/linkfinder
+module github.com/TofuOverdose/WebMapMaker
 
 go 1.14
 

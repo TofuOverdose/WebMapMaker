@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 
-	"example.com/sergrey/linkfinder/scrapper"
+	"github.com/TofuOverdose/WebMapMaker/scrapper"
 )
 
 func main() {
@@ -12,7 +12,7 @@ func main() {
 		IncludeSubdomains:    true,
 	}
 	scrapper := scrapper.NewLinkScrapper(config)
-	output, err := scrapper.GetInnerLinks("https://www.a2design.biz")
+	output, err := scrapper.GetInnerLinks("https://www.google.com")
 	if err != nil {
 		fmt.Println(err)
 		return

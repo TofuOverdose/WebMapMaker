@@ -9,7 +9,7 @@ import (
 	"strings"
 	"sync"
 
-	"example.com/sergrey/linkfinder/links"
+	"github.com/TofuOverdose/WebMapMaker/links"
 )
 
 type Config struct {
