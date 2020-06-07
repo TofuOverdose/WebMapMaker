@@ -3,6 +3,7 @@ package links
 import (
 	"io"
 	"net/url"
+	"strings"
 
 	"golang.org/x/net/html"
 )
@@ -76,6 +77,7 @@ func ParseLinksChannel(reader io.Reader) (<-chan Link, <-chan error) {
 				return
 			}
 
+			href = strings.Trim(href, " ")
 			url, err := url.Parse(href)
 			if err != nil {
 				errChan <- err

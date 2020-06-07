@@ -131,12 +131,11 @@ func travel(
 			case link, ok := <-dataChan:
 				if !ok {
 					return
-				} else {
-					nextAddr, pass := filterFunc(&link)
-					if pass {
-						wg.Add(1)
-						go visitFunc(nextAddr)
-					}
+				}
+				nextAddr, pass := filterFunc(&link)
+				if pass {
+					wg.Add(1)
+					go visitFunc(nextAddr)
 				}
 			case err := <-errChan:
 				outChan <- SearchResult{
@@ -188,9 +187,9 @@ func restoreFullUrl(base *url.URL, path string) string {
 	}
 	var scheme string
 	if s := base.Scheme; s == "" {
-		scheme = "https"
+		scheme = "http"
 	} else {
 		scheme = s
 	}
-	return scheme + "://" + hostname + path
+	return scheme + "://" + hostname + "/" + strings.TrimLeft(path, "/")
 }

@@ -8,7 +8,7 @@ import (
 
 func main() {
 	config := scrapper.Config{
-		IgnoreTopLevelDomain: true,
+		IgnoreTopLevelDomain: false,
 		IncludeSubdomains:    true,
 	}
 	scrapper := scrapper.NewLinkScrapper(config)
