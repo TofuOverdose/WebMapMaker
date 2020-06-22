@@ -9,23 +9,25 @@ import (
 func main() {
 	config := scrapper.Config{
 		IgnoreTopLevelDomain: false,
-		IncludeSubdomains:    true,
+		IncludeSubdomains:    false,
 	}
-	scrapper := scrapper.NewLinkScrapper(config)
-	output, err := scrapper.GetInnerLinks("https://www.google.com")
+	scr := scrapper.NewLinkScrapper(config)
+	output, err := scr.GetInnerLinks("https://gobyexample.com")
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
-	count := 0
+
+	results := make([]scrapper.SearchResult, 0)
+	maxHops := 0
 	for o := range output {
 		if o.Error != nil {
 			fmt.Printf("ERROR on address %s: %s\n", o.Url, o.Error)
 		} else {
-			count++
-			fmt.Println(count)
+			results = append(results, o)
+			if o.Hops > maxHops {
+				maxHops = o.Hops
+			}
 		}
-
 	}
-	fmt.Printf("Found %d inner links\n", count)
 }
