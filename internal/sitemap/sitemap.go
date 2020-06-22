@@ -17,7 +17,7 @@ const timeFormat string = "2006-01-02T15:04:05-0700"
 // NewUrl creates new Url struct instance
 func NewUrl(location, lastmod, changefreq string, priority float64) *Url {
 	if lastmod == "" {
-		changefreq = time.Now().Format(timeFormat)
+		lastmod = time.Now().Format(timeFormat)
 	}
 	return &Url{
 		Loc:        location,
