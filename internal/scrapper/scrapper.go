@@ -10,9 +10,10 @@ import (
 	"sync"
 
 	"github.com/TofuOverdose/WebMapMaker/internal/links"
+	"github.com/TofuOverdose/WebMapMaker/internal/utils"
 )
 
-type Config struct {
+type SearchConfig struct {
 	IncludeSubdomains     bool
 	IgnoreTopLevelDomain  bool
 	IncludeLinksWithQuery bool
@@ -30,18 +31,20 @@ var defaultFetchFunc FetchFunc = func(addr string) (io.ReadCloser, error) {
 }
 
 type LinkScrapper struct {
-	config    Config
-	fetchFunc FetchFunc
+	config      SearchConfig
+	maxRoutines uint
+	fetchFunc   FetchFunc
 }
 
 func (ls *LinkScrapper) SetFetchFunc(fetchFunc FetchFunc) {
 	ls.fetchFunc = fetchFunc
 }
 
-func NewLinkScrapper(config Config) *LinkScrapper {
+func NewLinkScrapper(config SearchConfig, maxRoutines uint) *LinkScrapper {
 	return &LinkScrapper{
-		config:    config,
-		fetchFunc: defaultFetchFunc,
+		config:      config,
+		fetchFunc:   defaultFetchFunc,
+		maxRoutines: maxRoutines,
 	}
 }
 
@@ -97,14 +100,19 @@ func (ls *LinkScrapper) GetInnerLinks(initialAddr string) (<-chan SearchResult, 
 		return nextUrl.String(), true
 	}
 
-	return travel(initialAddr, ls.fetchFunc, filter), nil
+	return travel(initialAddr, ls.fetchFunc, filter, ls.maxRoutines), nil
 }
 
 func travel(
 	initialAddr string,
 	fetchFunc func(string) (io.ReadCloser, error),
 	filterFunc func(*links.Link) (string, bool),
+	maxRoutines uint,
 ) <-chan SearchResult {
+	var sema *utils.Sema
+	if maxRoutines > 0 {
+		sema = utils.NewSema(maxRoutines)
+	}
 	outChan := make(chan SearchResult)
 	history := make(map[string]bool)
 	var mut sync.Mutex
@@ -112,6 +120,15 @@ func travel(
 
 	var visitFunc func(addr string, hopsCount int)
 	visitFunc = func(addr string, hopsCount int) {
+		if sema != nil {
+			sema.WaitToAcquire()
+		}
+
+		defer func() {
+			if sema != nil {
+				sema.Release()
+			}
+		}()
 		defer wg.Done()
 
 		mut.Lock()

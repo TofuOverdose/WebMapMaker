@@ -1,7 +1,9 @@
 package main
 
 import (
+	"fmt"
 	"log"
+	"time"
 
 	"github.com/TofuOverdose/WebMapMaker/internal/scrapper"
 	"github.com/TofuOverdose/WebMapMaker/internal/sitemap"
@@ -9,17 +11,19 @@ import (
 
 // simple demonstration of how this thing's supposed to work
 func main() {
-	config := scrapper.Config{
-		IgnoreTopLevelDomain: false,
-		IncludeSubdomains:    false,
+	config := scrapper.SearchConfig{
+		IgnoreTopLevelDomain:  true,
+		IncludeSubdomains:     true,
+		IncludeLinksWithQuery: true,
 	}
-	scr := scrapper.NewLinkScrapper(config)
+	scr := scrapper.NewLinkScrapper(config, 4)
+	timeStart := time.Now()
 	output, err := scr.GetInnerLinks("https://gobyexample.com")
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	results := make([]scrapper.SearchResult, 0)
+	results := make([]scrapper.SearchResult, 1)
 	maxHops := 0
 	for o := range output {
 		if o.Error != nil {
@@ -31,6 +35,8 @@ func main() {
 			}
 		}
 	}
+
+	fmt.Printf("Scrapping finished in %f seconds", time.Since(timeStart).Seconds())
 
 	sm := sitemap.NewUrlSet()
 	for _, res := range results {
@@ -45,5 +51,5 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	log.Println(string(data))
+	_ = string(data)
 }
