@@ -2,14 +2,17 @@ package sitemap
 
 import (
 	"encoding/xml"
+	"io"
+	"strings"
 	"time"
 )
 
 type Url struct {
-	Loc        string  `xml:"loc"`
-	Lastmod    string  `xml:"lastmod,omitempty"`
-	Changefreq string  `xml:"changefreq,omitempty"`
-	Priority   float64 `xml:"priority,omitempty"`
+	XMLName    xml.Name `xml:"url"`
+	Loc        string   `xml:"loc"`
+	Lastmod    string   `xml:"lastmod,omitempty"`
+	Changefreq string   `xml:"changefreq,omitempty"`
+	Priority   float64  `xml:"priority,omitempty"`
 }
 
 const timeFormat string = "2006-01-02T15:04:05-0700"
@@ -28,8 +31,9 @@ func NewUrl(location, lastmod, changefreq string, priority float64) *Url {
 }
 
 type UrlSet struct {
-	Namespace string `xml:"xmlns,attr"`
-	Urls      []Url  `xml:"url"`
+	XMLName   xml.Name `xml:"urlset"`
+	Namespace string   `xml:"xmlns,attr"`
+	Urls      []Url    `xml:"url"`
 }
 
 const defaultSitemapNamespace string = "https://www.sitemaps.org/schemas/sitemap/0.9/"
@@ -45,24 +49,39 @@ func (us *UrlSet) AddUrl(urls ...Url) {
 	us.Urls = append(us.Urls, urls...)
 }
 
-func (us *UrlSet) ToXML() ([]byte, error) {
-	return xml.MarshalIndent(us, "", " ")
-}
+func (us *UrlSet) WriteXml(w io.Writer) error {
+	enc := xml.NewEncoder(w)
+	enc.Indent("", strings.Repeat(" ", 4))
 
-func (us *UrlSet) Locations() []string {
-	urls := make([]string, 0)
-	for _, u := range us.Urls {
-		urls = append(urls, u.Loc)
+	if err := enc.Encode(us); err != nil {
+		return err
 	}
-	return urls
+	return nil
 }
 
-type Sitemap struct {
-	Loc string `xml:"loc"`
+func (us *UrlSet) WritePlain(w io.Writer) error {
+	tc := len(us.Urls)
+	for i := 0; i < tc-1; i++ {
+		ubytes := []byte(us.Urls[i].Loc + " ")
+		if _, err := w.Write(ubytes); err != nil {
+			return err
+		}
+	}
+	ubytes := []byte(us.Urls[tc-1].Loc)
+	if _, err := w.Write(ubytes); err != nil {
+		return err
+	}
+	return nil
+}
+
+type sitemap struct {
+	XMLName xml.Name `xml:"sitemap"`
+	Loc     string   `xml:"loc"`
 }
 
 type Index struct {
-	Sitemaps []Sitemap `xml:sitemap`
+	XMLName  xml.Name  `xml:"sitemapindex"`
+	Sitemaps []sitemap `xml:"sitemap"`
 }
 
 func NewIndex() *Index {
@@ -70,7 +89,7 @@ func NewIndex() *Index {
 }
 
 func (index *Index) AddSitemap(location string) {
-	sm := Sitemap{
+	sm := sitemap{
 		Loc: location,
 	}
 	index.Sitemaps = append(index.Sitemaps, sm)

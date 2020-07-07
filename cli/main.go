@@ -62,41 +62,25 @@ func main() {
 		}
 		us.AddUrl(*sitemap.NewUrl(res.Url, "", "", priority))
 	}
+	// Open output file
+	f, err := os.Create(inputData.OutputPath)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	defer f.Close()
 
-	var data []byte
 	switch inputData.OutputType {
 	case "XML":
-		data, err = us.ToXML()
+		err = us.WriteXml(f)
 	case "TXT":
-		data = []byte(strings.Join(us.Locations(), " "))
+		err = us.WritePlain(f)
 	}
 	if err != nil {
 		msg := fmt.Sprintf("FATAL: %s\n", err.Error())
 		inputData.LogWriter.Write([]byte(msg))
 		return
 	}
-
-	err = writeToFile(inputData.OutputPath, data)
-	if err != nil {
-		msg := fmt.Sprintf("FATAL: %s\n", err.Error())
-		inputData.LogWriter.Write([]byte(msg))
-		return
-	}
-}
-
-func writeToFile(path string, data []byte) error {
-	f, err := os.Create(path)
-	if err != nil {
-		return err
-	}
-
-	defer f.Close()
-	_, err = f.Write(data)
-	if err != nil {
-		return err
-	}
-	f.Sync()
-	return nil
 }
 
 func getInputData() (*InputData, error) {
