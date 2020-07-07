@@ -1,4 +1,4 @@
-package scrapper
+package linkcrawler
 
 import (
 	"fmt"

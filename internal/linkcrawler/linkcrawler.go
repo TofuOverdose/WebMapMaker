@@ -1,4 +1,4 @@
-package scrapper
+package linkcrawler
 
 import (
 	"errors"
@@ -30,18 +30,18 @@ var defaultFetchFunc FetchFunc = func(addr string) (io.ReadCloser, error) {
 	return res.Body, nil
 }
 
-type LinkScrapper struct {
+type LinkCrawler struct {
 	config      SearchConfig
 	maxRoutines uint
 	fetchFunc   FetchFunc
 }
 
-func (ls *LinkScrapper) SetFetchFunc(fetchFunc FetchFunc) {
+func (ls *LinkCrawler) SetFetchFunc(fetchFunc FetchFunc) {
 	ls.fetchFunc = fetchFunc
 }
 
-func NewLinkScrapper(config SearchConfig, maxRoutines uint) *LinkScrapper {
-	return &LinkScrapper{
+func NewLinkCrawler(config SearchConfig, maxRoutines uint) *LinkCrawler {
+	return &LinkCrawler{
 		config:      config,
 		fetchFunc:   defaultFetchFunc,
 		maxRoutines: maxRoutines,
@@ -54,7 +54,7 @@ type SearchResult struct {
 	Error error
 }
 
-func (ls *LinkScrapper) GetInnerLinks(initialAddr string) (<-chan SearchResult, error) {
+func (ls *LinkCrawler) GetInnerLinks(initialAddr string) (<-chan SearchResult, error) {
 	baseURL, err := url.Parse(initialAddr)
 	if err != nil {
 		return nil, err
