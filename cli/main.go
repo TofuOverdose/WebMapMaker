@@ -7,9 +7,11 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/TofuOverdose/WebMapMaker/internal/linkcrawler"
 	"github.com/TofuOverdose/WebMapMaker/internal/sitemap"
+	"github.com/TofuOverdose/WebMapMaker/internal/utils/gost"
 )
 
 type InputData struct {
@@ -40,19 +42,67 @@ func main() {
 	results := make([]linkcrawler.SearchResult, 0)
 	maxHops := 0
 
-	for res := range resChan {
-		if res.Error != nil {
-			msg := fmt.Sprintf("FAIL %s: %s\n", res.Url, res.Error.Error())
-			inputData.LogWriter.Write([]byte(msg))
-			break
-		}
-
-		results = append(results, res)
-		if res.Hops > maxHops {
-			maxHops = res.Hops
-		}
+	// Configuring CLI
+	type linksDisplayStats struct {
+		TotalFoundCount int
+		AcceptedCount   int
+		FailedCount     int
 	}
 
+	linkStats := linksDisplayStats{
+		TotalFoundCount: 0,
+		AcceptedCount:   0,
+		FailedCount:     0,
+	}
+	sdt := "\t[ {{.AcceptedCount}} accepted | {{.FailedCount}} errors | {{.TotalFoundCount}} total links found ]"
+
+	statsDisplay, err := gost.NewDisplay(sdt, linkStats)
+	if err != nil {
+		panic(err)
+	}
+
+	pb := gost.NewBouncer(10, gost.BouncerCharSet{
+		Inactive:    '░',
+		Active:      '█',
+		BorderLeft:  "|",
+		BorderRight: "|",
+		Separator:   "|",
+	})
+
+	tr := time.Millisecond * 50
+
+	timer := gost.NewTimer(
+		gost.TimerOptionShowUnit(true),
+		gost.TimerOptionTimeFormatter(gost.TimeFormatterAdaptive),
+		gost.TimerOptionSetDecoration(" (time elapsed: ", ") "),
+	)
+
+	statusBar := gost.NewStatusBar(tr, pb, statsDisplay, timer)
+	statusBar.Run()
+	statusBar.Write([]byte("Started crawling the website"))
+	for res := range resChan {
+		linkStats.TotalFoundCount++
+		if res.Error != nil {
+			linkStats.FailedCount++
+			msg := fmt.Sprintf("FAIL %s: %s", res.Url, res.Error.Error())
+			//inputData.LogWriter.Write([]byte(msg))
+			_, err := statusBar.Write([]byte(msg))
+			if err != nil {
+				panic(err)
+			}
+		} else {
+			linkStats.AcceptedCount++
+			results = append(results, res)
+			if res.Hops > maxHops {
+				maxHops = res.Hops
+			}
+		}
+
+		// Update display data
+		statsDisplay.SetData(linkStats)
+	}
+	statusBar.Close()
+	statusBar.Write([]byte("Finished crawling. Building sitemap..."))
 	us := sitemap.NewUrlSet()
 
 	for _, res := range results {
@@ -81,6 +131,7 @@ func main() {
 		inputData.LogWriter.Write([]byte(msg))
 		return
 	}
+	statusBar.Write([]byte(fmt.Sprintf("Sitemap saved to %s", inputData.OutputPath)))
 }
 
 func getInputData() (*InputData, error) {
@@ -141,7 +192,7 @@ func checkOutputFile(path string, allowedTypes []string) (string, error) {
 		types[i] = strings.ToUpper(t)
 	}
 
-	errTypes := fmt.Errorf("Output file type must be one of these: %s\n", strings.Join(types, ", "))
+	errTypes := fmt.Errorf("Output file type must be one of these: %s", strings.Join(types, ", "))
 
 	fExt := strings.ToUpper(getExtension(path))
 	if fExt == "" {
