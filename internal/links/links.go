@@ -48,6 +48,77 @@ func parseHref(linkNode *html.Node) (string, bool) {
 	return "", false
 }
 
+type OperationPipe struct {
+	dataChan chan Link
+	errChan  chan error
+	doneChan chan struct{}
+}
+
+func NewOperationPipe(dataChan chan Link, errChan chan error) *OperationPipe {
+	return &OperationPipe{
+		dataChan: dataChan,
+		errChan:  errChan,
+	}
+}
+
+func (op *OperationPipe) Close() {
+	close(op.dataChan)
+	close(op.errChan)
+}
+
+func seekLinkNodes(node *html.Node, op *OperationPipe, dc DoneChan) {
+	defer func() {
+		for c := node.FirstChild; c != nil; c = c.NextSibling {
+			seekLinkNodes(c, op, dc)
+		}
+	}()
+
+	if node == nil || node.Type == html.ErrorNode {
+		return
+	}
+
+	if node.Data == "a" {
+		href, found := parseHref(node)
+		if !found {
+			return
+		}
+
+		href = strings.Trim(href, " ")
+		url, err := url.Parse(href)
+		if err != nil {
+			op.errChan <- err
+			return
+		}
+
+		var name string
+		if child := node.FirstChild; child != nil {
+			name = child.Data
+		}
+		op.dataChan <- Link{
+			Name: name,
+			Url:  *url,
+			Type: getLinkType(url),
+		}
+	}
+}
+
+// DoneChan is a channel that will be closed when some operation is done executing
+type DoneChan chan struct{}
+
+func FindsLinks(reader io.Reader, op *OperationPipe) (DoneChan, error) {
+	node, err := html.Parse(reader)
+	if err != nil {
+		return nil, err
+	}
+
+	dc := make(DoneChan)
+	go func() {
+		seekLinkNodes(node, op, dc)
+	}()
+	return dc, nil
+}
+
+// TODO: test FindsLinks function above and remove this one
 func ParseLinksChannel(reader io.Reader) (<-chan Link, <-chan error) {
 	outChan := make(chan Link)
 	errChan := make(chan error)

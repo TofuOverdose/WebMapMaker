@@ -1,5 +1,7 @@
 package gost
 
+// Dedicated to Pauly, the love of my life ❤️
+
 import (
 	"bytes"
 	"fmt"
@@ -12,7 +14,7 @@ import (
 	"golang.org/x/crypto/ssh/terminal"
 )
 
-// StatusBar is a structure that acts as a proxy to os.Stdout to output a pretty status info
+// StatusBar is a structure that acts as a proxy to Stdout to make your logs pretty
 type StatusBar struct {
 	tickRate time.Duration
 	isTTY    bool
