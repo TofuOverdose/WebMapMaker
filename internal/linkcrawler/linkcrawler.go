@@ -2,8 +2,10 @@ package linkcrawler
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
+	"net/http/httputil"
 	"net/url"
 	"regexp"
 	"strings"
@@ -18,6 +20,32 @@ type SearchConfig struct {
 	IgnoreTopLevelDomain  bool
 	IncludeLinksWithQuery bool
 	ExcludedPaths         []regexp.Regexp
+}
+
+type FetchError struct {
+	Code         int
+	Status       string
+	RequestURLs  []string
+	RefererURL   string
+	RequestDump  []byte
+	ResponseDump []byte
+}
+
+// NewFetchError makes new fetch error instance
+func NewFetchError(response *http.Response, refererURL string) *FetchError {
+	reqDump, _ := httputil.DumpRequestOut(response.Request, false)
+	resDump, _ := httputil.DumpResponse(response, false)
+	return &FetchError{
+		Code:         response.StatusCode,
+		Status:       response.Status,
+		RefererURL:   refererURL,
+		RequestDump:  reqDump,
+		ResponseDump: resDump,
+	}
+}
+
+func (fe *FetchError) Error() string {
+	return fmt.Sprintf("Fetch error of resource %s from referer %s: %s", fe.RequestURLs[0], fe.RefererURL, fe.Status)
 }
 
 type FetchFunc func(string) (io.ReadCloser, error)
