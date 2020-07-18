@@ -7,14 +7,11 @@ import (
 	"testing"
 )
 
-func TestPLCToCreateWithoutErrors(t *testing.T) {
+func TestFindLinksToCreateWithoutErrors(t *testing.T) {
 	r := bytes.NewReader(make([]byte, 0))
-	outChan, errChan := ParseLinksChannel(r)
-	if outChan == nil {
-		t.Fatalf("Output channel is nil\n")
-	}
-	if errChan == nil {
-		t.Fatalf("Error channel is nil\n")
+	_, _, err := FindLinks(r)
+	if err != nil {
+		t.Fatal("FindLinks returned error on creation: ", err)
 	}
 }
 
@@ -28,7 +25,7 @@ func genReaderWithLinks(links map[string]string) *strings.Reader {
 	return strings.NewReader(output)
 }
 
-func TestPLCToReadCorrectLinks(t *testing.T) {
+func TestFindLinksToReadCorrectLinks(t *testing.T) {
 	wanted := map[string]string{
 		"link_number_one":   "/link/number/one/",
 		"link_number_two":   "https://www.link.two/foo/bar",
@@ -36,7 +33,10 @@ func TestPLCToReadCorrectLinks(t *testing.T) {
 	}
 	results := make(map[string]string)
 	r := genReaderWithLinks(wanted)
-	outChan, errChan := ParseLinksChannel(r)
+	outChan, errChan, err := FindLinks(r)
+	if err != nil {
+		t.Fatal("FindLinks returned error on creation: ", err)
+	}
 
 Loop:
 	for {

@@ -24,7 +24,7 @@ type Link struct {
 }
 
 func (link *Link) String() string {
-	return link.Name + ": " + link.Url.String()
+	return link.Name + " " + link.Url.String()
 }
 
 func getLinkType(url *url.URL) LinkType {
@@ -48,28 +48,10 @@ func parseHref(linkNode *html.Node) (string, bool) {
 	return "", false
 }
 
-type OperationPipe struct {
-	dataChan chan Link
-	errChan  chan error
-	doneChan chan struct{}
-}
-
-func NewOperationPipe(dataChan chan Link, errChan chan error) *OperationPipe {
-	return &OperationPipe{
-		dataChan: dataChan,
-		errChan:  errChan,
-	}
-}
-
-func (op *OperationPipe) Close() {
-	close(op.dataChan)
-	close(op.errChan)
-}
-
-func seekLinkNodes(node *html.Node, op *OperationPipe, dc DoneChan) {
+func seekLinkNodes(node *html.Node, outChan chan Link, errChan chan error) {
 	defer func() {
 		for c := node.FirstChild; c != nil; c = c.NextSibling {
-			seekLinkNodes(c, op, dc)
+			seekLinkNodes(c, outChan, errChan)
 		}
 	}()
 
@@ -86,7 +68,7 @@ func seekLinkNodes(node *html.Node, op *OperationPipe, dc DoneChan) {
 		href = strings.Trim(href, " ")
 		url, err := url.Parse(href)
 		if err != nil {
-			op.errChan <- err
+			errChan <- err
 			return
 		}
 
@@ -94,7 +76,7 @@ func seekLinkNodes(node *html.Node, op *OperationPipe, dc DoneChan) {
 		if child := node.FirstChild; child != nil {
 			name = child.Data
 		}
-		op.dataChan <- Link{
+		outChan <- Link{
 			Name: name,
 			Url:  *url,
 			Type: getLinkType(url),
@@ -102,20 +84,21 @@ func seekLinkNodes(node *html.Node, op *OperationPipe, dc DoneChan) {
 	}
 }
 
-// DoneChan is a channel that will be closed when some operation is done executing
-type DoneChan chan struct{}
-
-func FindsLinks(reader io.Reader, op *OperationPipe) (DoneChan, error) {
+func FindLinks(reader io.Reader) (<-chan Link, <-chan error, error) {
 	node, err := html.Parse(reader)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	dc := make(DoneChan)
+	oc := make(chan Link)
+	ec := make(chan error)
 	go func() {
-		seekLinkNodes(node, op, dc)
+		seekLinkNodes(node, oc, ec)
+		close(oc)
+		close(ec)
 	}()
-	return dc, nil
+
+	return oc, ec, nil
 }
 
 // TODO: test FindsLinks function above and remove this one
