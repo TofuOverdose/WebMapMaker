@@ -53,7 +53,7 @@ func TestMakeAbsoluteUrl(t *testing.T) {
 	host := "test.domain.test"
 	base := genURL("https", host, 0, 0, false)
 	want := genURL("https", host, r.Intn(5), 0, false)
-	got := makeAbsoluteURL(&base, want.Path)
+	got := makeAbsoluteURL(base, want.Path)
 	if got.String() != want.String() {
 		t.Errorf("Wanted %s, got %s", want.String(), got.String())
 	}

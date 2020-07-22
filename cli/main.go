@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"io"
@@ -15,11 +16,11 @@ import (
 )
 
 type InputData struct {
-	TargetURL    string
-	OutputPath   string
-	OutputType   string
-	SearchConfig linkcrawler.SearchConfig
-	LogWriter    io.WriteCloser
+	TargetURL  string
+	OutputPath string
+	OutputType string
+	Options    []linkcrawler.Option
+	LogWriter  io.WriteCloser
 }
 
 func main() {
@@ -29,11 +30,9 @@ func main() {
 		return
 	}
 
-	cr := linkcrawler.NewLinkCrawler(inputData.SearchConfig, 0)
-
 	defer inputData.LogWriter.Close()
 
-	resChan, err := cr.GetInnerLinks(inputData.TargetURL)
+	resChan, err := linkcrawler.Crawl(context.Background(), inputData.TargetURL, inputData.Options...)
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -84,7 +83,7 @@ func main() {
 		linkStats.TotalFoundCount++
 		if res.Error != nil {
 			linkStats.FailedCount++
-			msg := fmt.Sprintf("FAIL %s: %s", res.Url, res.Error.Error())
+			msg := fmt.Sprintf("FAIL %s: %s", res.Addr, res.Error.Error())
 			//inputData.LogWriter.Write([]byte(msg))
 			_, err := statusBar.Write([]byte(msg))
 			if err != nil {
@@ -110,7 +109,7 @@ func main() {
 		if res.Hops > 0 {
 			priority = float64(res.Hops) / priority
 		}
-		us.AddUrl(*sitemap.NewUrl(res.Url, "", "", priority))
+		us.AddUrl(*sitemap.NewUrl(res.Addr, "", "", priority))
 	}
 	// Open output file
 	f, err := os.Create(inputData.OutputPath)
@@ -162,12 +161,23 @@ func getInputData() (*InputData, error) {
 		inputData.LogWriter = wc
 	}
 
-	// Set up the config object based on the received flags
-	inputData.SearchConfig = linkcrawler.SearchConfig{
-		IgnoreTopLevelDomain:  *flag.Bool("ignoreTopLevelDomain", true, "Set FALSE to include links with different top level domains (e.g. website.foo and website.bar)"),
-		IncludeLinksWithQuery: *flag.Bool("includeWithQuery", false, "Set TRUE to include links with queries"),
-		IncludeSubdomains:     *flag.Bool("includeSubdomains", false, "Set TRUE to include links to subdomains of the target URL"),
+	// Set up the crawler options based on the received flags
+	options := make([]linkcrawler.Option, 0)
+	if v := *flag.Int("maxRoutines", 0, "Set positive number to limit the number of spawned goroutines"); v > -1 {
+		options = append(options, linkcrawler.OptionMaxRoutines(uint(v)))
 	}
+	if v := *flag.Bool("ignoreTopLevelDomain", true, "Set FALSE to include links with different top level domains (e.g. website.foo and website.bar)"); v {
+		options = append(options, linkcrawler.OptionSearchIgnoreTopLevelDomain())
+	}
+	if v := *flag.Bool("includeWithQuery", false, "Set TRUE to include links with queries"); v {
+		options = append(options, linkcrawler.OptionSearchAllowQuery())
+	}
+	if v := *flag.Bool("includeSubdomains", false, "Set TRUE to include links to subdomains of the target URL"); v {
+		options = append(options, linkcrawler.OptionSearchIncludeSubdomains())
+	}
+	// TODO add ignored paths option
+
+	inputData.Options = options
 
 	return &inputData, nil
 }
