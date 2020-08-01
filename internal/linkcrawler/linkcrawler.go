@@ -52,17 +52,23 @@ func (fe *FetchError) Error() string {
 
 type fetchFunc func(string) (io.ReadCloser, error)
 
-type filterFunc func(link links.Link) (string, bool)
+type filterFunc func(url.URL) bool
 
 var defaultFetchFunc fetchFunc = func(addr string) (io.ReadCloser, error) {
 	res, err := http.Get(addr)
 	if err != nil {
 		return nil, err
 	}
+
+	if res.StatusCode >= 400 {
+		return nil, NewFetchError(res, addr)
+	}
+
 	return res.Body, nil
 }
 
 type linkCrawler struct {
+	initURL     *url.URL
 	maxRoutines uint
 	fetchFunc   fetchFunc
 	filterFunc  filterFunc
@@ -73,42 +79,47 @@ type linkCrawler struct {
 
 func makeFilterFunc(config SearchConfig, initURL url.URL) filterFunc {
 	initHostname := initURL.Hostname()
-	return func(link links.Link) (string, bool) {
-		// Check if path is excluded
-		for _, p := range config.ExcludedPaths {
-			if p.MatchString(link.Url.String()) {
-				return "", false
-			}
+	return func(u url.URL) bool {
+		// Skip crap like this
+		if str := u.String(); str == "" || str[0] == '.' {
+			return false
 		}
 
-		var nextURL url.URL
-		switch link.Type {
-		case links.AbsolutePathLink:
-			hostLink := link.Url.Hostname()
-			hostBase := initHostname
-			if config.IgnoreTopLevelDomain {
-				hostLink = trimTopLevelDomain(hostLink)
-				hostBase = trimTopLevelDomain(hostBase)
-			}
-			pass := isSubdomain(hostBase, hostLink) && config.IncludeSubdomains
-			if pass {
-				nextURL = link.Url
-			}
-			return "", false
-		case links.RelativePathLink:
-			nextURL = makeAbsoluteURL(initURL, link.Url.Path)
-		default:
-			return "", false
+		// Skip anchor links
+		if u.Hostname() == "" && u.EscapedPath() == "" && u.Fragment != "" {
+			return false
+		}
+
+		// Pass relative links
+		if u.Host == "" {
+			return true
 		}
 
 		// By default, URLs with query and anchor will be ignored
 		// Not sure this is a right decision but at the moment I figured that it's certainly wrong to modify the URL assuming there should be path without query.
 		// If this assumption is true, such URL will probably be linked from some other place and eventually will be found some time later anyway.
-		if !config.IncludeLinksWithQuery && !isCleanURL(nextURL) {
-			return "", false
+		if !config.IncludeLinksWithQuery && !isCleanURL(u) {
+			return false
 		}
 
-		return nextURL.String(), true
+		// Check if path is excluded
+		for _, p := range config.ExcludedPaths {
+			if p.MatchString(u.String()) {
+				return false
+			}
+		}
+
+		hn := u.Hostname()
+		if config.IgnoreTopLevelDomain {
+			hn = trimTopLevelDomain(hn)
+			initHostname = trimTopLevelDomain(initHostname)
+		}
+
+		if config.IncludeSubdomains && !isSubdomain(initHostname, hn) {
+			return false
+		}
+
+		return hn == initHostname
 	}
 }
 
@@ -119,7 +130,13 @@ type SearchResult struct {
 	Error error
 }
 
-func (crawler *linkCrawler) visit(outChan chan SearchResult, address string, hopsCount int) {
+func (crawler *linkCrawler) visit(outChan chan SearchResult, url url.URL, hopsCount int) {
+	address := url.String()
+	if url.Scheme == "" && url.Host == "" {
+		url.Scheme = crawler.initURL.Scheme
+		url.Host = crawler.initURL.Host
+	}
+
 	if crawler.sem != nil {
 		crawler.sem.WaitToAcquire()
 	}
@@ -131,7 +148,7 @@ func (crawler *linkCrawler) visit(outChan chan SearchResult, address string, hop
 	defer crawler.wg.Done()
 
 	// if the address wasn't added to history, we've already been there and need to exit
-	if added := crawler.history.TryAdd(address); !added {
+	if !crawler.history.TryAdd(address) {
 		return
 	}
 
@@ -157,10 +174,9 @@ func (crawler *linkCrawler) visit(outChan chan SearchResult, address string, hop
 			if !ok {
 				return
 			}
-			nextAddr, pass := crawler.filterFunc(link)
-			if pass {
+			if pass := crawler.filterFunc(link.Url); pass {
 				crawler.wg.Add(1)
-				go crawler.visit(outChan, nextAddr, hopsCount+1)
+				go crawler.visit(outChan, link.Url, hopsCount+1)
 			}
 		case err := <-errChan:
 			outChan <- SearchResult{
@@ -241,6 +257,7 @@ func Crawl(ctx context.Context, initialAddr string, options ...Option) (<-chan S
 		sem = utils.NewSema(opt.MaxRoutines)
 	}
 	crawler := &linkCrawler{
+		initURL:     initURL,
 		maxRoutines: opt.MaxRoutines,
 		fetchFunc:   defaultFetchFunc,
 		filterFunc:  makeFilterFunc(opt.SearchConfig, *initURL),
@@ -251,7 +268,7 @@ func Crawl(ctx context.Context, initialAddr string, options ...Option) (<-chan S
 
 	outChan := make(chan SearchResult)
 	crawler.wg.Add(1)
-	go crawler.visit(outChan, initialAddr, 0)
+	go crawler.visit(outChan, *initURL, 0)
 	go func() {
 		crawler.wg.Wait()
 		close(outChan)
