@@ -137,46 +137,56 @@ func getInputData() (*InputData, error) {
 	inputData := InputData{}
 
 	// First define the flags
-	pTargetURL := flag.String("t", "", "Target URL to start crawling from")
-	pOutputPath := flag.String("o", "", "Output file (either .txt or .xml)")
-	pLogFile := flag.String("log", "", "Path to log file")
+	reqTargetURL := flag.String("t", "", "Target URL to start crawling from")
+	reqOutputPath := flag.String("o", "", "Output file (either .txt or .xml)")
+	reqLogFile := flag.String("log", "", "Path to log file")
+	// Set up the crawler options based on the received flags
+	optMaxRoutines := flag.Int("maxRoutines", 0, "Set positive number to limit the number of spawned goroutines")
+	optSearchIgnoreTopLevelDomain := flag.Bool("ignoreTopLevelDomain", true, "Set FALSE to include links with different top level domains (e.g. website.foo and website.bar)")
+	optSearchAllowQuery := flag.Bool("includeWithQuery", false, "Set TRUE to include links with queries")
+	optSearchIncludeSubdomains := flag.Bool("includeSubdomains", false, "Set TRUE to include links to subdomains of the target URL")
+	optSearchIgnorePaths := flag.String("ignoredPaths", "", "Path substrings to ignore separated by semicolon")
 	// Then run the parser
 	flag.Parse()
 	// Validation for the received flags
-	if err := validateURL(*pTargetURL); err != nil {
+	if err := validateURL(*reqTargetURL); err != nil {
 		return nil, err
 	}
-	inputData.TargetURL = *pTargetURL
+	inputData.TargetURL = *reqTargetURL
 
-	if ot, err := checkOutputFile(*pOutputPath, []string{"XML", "TXT"}); err != nil {
+	if ot, err := checkOutputFile(*reqOutputPath, []string{"XML", "TXT"}); err != nil {
 		return nil, err
 	} else {
-		inputData.OutputPath = *pOutputPath
+		inputData.OutputPath = *reqOutputPath
 		inputData.OutputType = ot
 	}
 
-	if wc, err := getWriteCloser(*pLogFile); err != nil {
+	if wc, err := getWriteCloser(*reqLogFile); err != nil {
 		return nil, err
 	} else {
 		inputData.LogWriter = wc
 	}
 
-	// Set up the crawler options based on the received flags
 	options := make([]linkcrawler.Option, 0)
-	if v := *flag.Int("maxRoutines", 0, "Set positive number to limit the number of spawned goroutines"); v > -1 {
-		options = append(options, linkcrawler.OptionMaxRoutines(uint(v)))
+	if *optMaxRoutines > -1 {
+		options = append(options, linkcrawler.OptionMaxRoutines(uint(*optMaxRoutines)))
 	}
-	if v := *flag.Bool("ignoreTopLevelDomain", true, "Set FALSE to include links with different top level domains (e.g. website.foo and website.bar)"); v {
+	if *optSearchIgnoreTopLevelDomain {
 		options = append(options, linkcrawler.OptionSearchIgnoreTopLevelDomain())
 	}
-	if v := *flag.Bool("includeWithQuery", false, "Set TRUE to include links with queries"); v {
+	if *optSearchAllowQuery {
 		options = append(options, linkcrawler.OptionSearchAllowQuery())
 	}
-	if v := *flag.Bool("includeSubdomains", false, "Set TRUE to include links to subdomains of the target URL"); v {
+	if *optSearchIncludeSubdomains {
 		options = append(options, linkcrawler.OptionSearchIncludeSubdomains())
 	}
-	// TODO add ignored paths option
-
+	if *optSearchIgnorePaths != "" {
+		paths := strings.Split(*optSearchIgnorePaths, ";")
+		for i, p := range paths {
+			paths[i] = strings.ReplaceAll(p, `"`, "")
+		}
+		options = append(options, linkcrawler.OptionSearchIgnorePaths(paths...))
+	}
 	inputData.Options = options
 
 	return &inputData, nil

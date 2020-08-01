@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
-	"regexp"
 	"strings"
 	"sync"
 
@@ -21,7 +20,7 @@ type SearchConfig struct {
 	IncludeSubdomains     bool
 	IgnoreTopLevelDomain  bool
 	IncludeLinksWithQuery bool
-	ExcludedPaths         []regexp.Regexp
+	ExcludedPaths         []string
 }
 
 type FetchError struct {
@@ -80,8 +79,9 @@ type linkCrawler struct {
 func makeFilterFunc(config SearchConfig, initURL url.URL) filterFunc {
 	initHostname := initURL.Hostname()
 	return func(u url.URL) bool {
+		addr := u.String()
 		// Skip crap like this
-		if str := u.String(); str == "" || str[0] == '.' {
+		if addr == "" || addr[0] == '.' {
 			return false
 		}
 
@@ -104,7 +104,7 @@ func makeFilterFunc(config SearchConfig, initURL url.URL) filterFunc {
 
 		// Check if path is excluded
 		for _, p := range config.ExcludedPaths {
-			if p.MatchString(u.String()) {
+			if strings.Contains(addr, p) {
 				return false
 			}
 		}
@@ -131,11 +131,11 @@ type SearchResult struct {
 }
 
 func (crawler *linkCrawler) visit(outChan chan SearchResult, url url.URL, hopsCount int) {
-	address := url.String()
 	if url.Scheme == "" && url.Host == "" {
 		url.Scheme = crawler.initURL.Scheme
 		url.Host = crawler.initURL.Host
 	}
+	address := url.String()
 
 	if crawler.sem != nil {
 		crawler.sem.WaitToAcquire()
@@ -228,7 +228,7 @@ func OptionSearchAllowQuery() Option {
 }
 
 // OptionSearchIgnorePaths allows to specify patterns for link paths crawler should ignore
-func OptionSearchIgnorePaths(patterns ...regexp.Regexp) Option {
+func OptionSearchIgnorePaths(patterns ...string) Option {
 	return func(co *CrawlOptions) {
 		co.SearchConfig.ExcludedPaths = patterns
 	}
