@@ -131,12 +131,7 @@ type SearchResult struct {
 }
 
 func (crawler *linkCrawler) visit(outChan chan SearchResult, url url.URL, hopsCount int) {
-	if url.Scheme == "" && url.Host == "" {
-		url.Scheme = crawler.initURL.Scheme
-		url.Host = crawler.initURL.Host
-	}
 	address := url.String()
-
 	if crawler.sem != nil {
 		crawler.sem.WaitToAcquire()
 	}
@@ -147,11 +142,6 @@ func (crawler *linkCrawler) visit(outChan chan SearchResult, url url.URL, hopsCo
 	}()
 	defer crawler.wg.Done()
 
-	// if the address wasn't added to history, we've already been there and need to exit
-	if !crawler.history.TryAdd(address) {
-		return
-	}
-
 	pageReader, err := crawler.fetchFunc(address)
 	if err != nil {
 		outChan <- SearchResult{
@@ -160,6 +150,7 @@ func (crawler *linkCrawler) visit(outChan chan SearchResult, url url.URL, hopsCo
 		}
 		return
 	}
+	defer pageReader.Close()
 	// send the successful search result to the output
 	outChan <- SearchResult{
 		Addr: address,
@@ -167,22 +158,34 @@ func (crawler *linkCrawler) visit(outChan chan SearchResult, url url.URL, hopsCo
 	}
 	// parse links on the newly received html
 	linksChan, errChan, err := links.FindLinks(pageReader)
-	defer pageReader.Close()
+	if err != nil {
+		panic(err)
+	}
+
 	for {
 		select {
 		case link, ok := <-linksChan:
 			if !ok {
-				return
+				linksChan = nil
 			}
-			if pass := crawler.filterFunc(link.Url); pass {
-				crawler.wg.Add(1)
-				go crawler.visit(outChan, link.Url, hopsCount+1)
+			if next := &link.Url; crawler.filterFunc(link.Url) {
+				next = crawler.initURL.ResolveReference(next)
+				if crawler.history.TryAdd(next.String()) {
+					crawler.wg.Add(1)
+					go crawler.visit(outChan, *next, hopsCount+1)
+				}
 			}
-		case err := <-errChan:
+		case e, ok := <-errChan:
+			if !ok {
+				errChan = nil
+			}
 			outChan <- SearchResult{
 				Addr:  address,
-				Error: err,
+				Error: e,
 			}
+		}
+		if linksChan == nil && errChan == nil {
+			return
 		}
 	}
 }

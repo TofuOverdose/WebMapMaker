@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log"
 	"net/url"
 	"os"
 	"strings"
@@ -26,17 +27,10 @@ type InputData struct {
 func main() {
 	inputData, err := getInputData()
 	if err != nil {
-		fmt.Println(err)
-		return
+		log.Fatal(err)
 	}
 
 	defer inputData.LogWriter.Close()
-
-	resChan, err := linkcrawler.Crawl(context.Background(), inputData.TargetURL, inputData.Options...)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
 
 	results := make([]linkcrawler.SearchResult, 0)
 	maxHops := 0
@@ -77,8 +71,16 @@ func main() {
 	)
 
 	statusBar := gost.NewStatusBar(tr, pb, statsDisplay, timer)
+
+	resChan, err := linkcrawler.Crawl(context.Background(), inputData.TargetURL, inputData.Options...)
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	statusBar.Run()
+
 	statusBar.Write([]byte("Started crawling the website"))
+
 	for res := range resChan {
 		linkStats.TotalFoundCount++
 		if res.Error != nil {
@@ -114,7 +116,7 @@ func main() {
 	// Open output file
 	f, err := os.Create(inputData.OutputPath)
 	if err != nil {
-		fmt.Println(err)
+		log.Fatal(err)
 		return
 	}
 	defer f.Close()
