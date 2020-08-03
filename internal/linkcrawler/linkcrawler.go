@@ -27,40 +27,48 @@ type FetchError struct {
 	Code         int
 	Status       string
 	RequestURLs  []string
-	RefererURL   string
 	RequestDump  []byte
 	ResponseDump []byte
 }
 
-// NewFetchError makes new fetch error instance
-func NewFetchError(response *http.Response, refererURL string) *FetchError {
-	reqDump, _ := httputil.DumpRequestOut(response.Request, false)
-	resDump, _ := httputil.DumpResponse(response, false)
-	return &FetchError{
-		Code:         response.StatusCode,
-		Status:       response.Status,
-		RefererURL:   refererURL,
-		RequestDump:  reqDump,
-		ResponseDump: resDump,
-	}
-}
-
 func (fe *FetchError) Error() string {
-	return fmt.Sprintf("Fetch error of resource %s from referer %s: %s", fe.RequestURLs[0], fe.RefererURL, fe.Status)
+	return fmt.Sprintf("Fetch error from %s (original request for %s): %s", fe.RequestURLs[len(fe.RequestURLs)-1], fe.RequestURLs[0], fe.Status)
 }
 
 type fetchFunc func(string) (io.ReadCloser, error)
 
 type filterFunc func(url.URL) bool
 
+const defaultMaxRedirects = 10
+
 var defaultFetchFunc fetchFunc = func(addr string) (io.ReadCloser, error) {
-	res, err := http.Get(addr)
+	reCount := 0
+	urls := []string{addr}
+	client := http.Client{
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			reCount++
+			if reCount == defaultMaxRedirects {
+				return fmt.Errorf("HTTP client exceeded maximum of %d redirects (initial request for %s)", defaultMaxRedirects, addr)
+			}
+			urls = append(urls, req.URL.String())
+			return nil
+		},
+	}
+	res, err := client.Get(addr)
 	if err != nil {
 		return nil, err
 	}
 
 	if res.StatusCode >= 400 {
-		return nil, NewFetchError(res, addr)
+		reqDump, _ := httputil.DumpRequestOut(res.Request, false)
+		resDump, _ := httputil.DumpResponse(res, false)
+		return nil, &FetchError{
+			Code:         res.StatusCode,
+			Status:       res.Status,
+			RequestURLs:  urls,
+			RequestDump:  reqDump,
+			ResponseDump: resDump,
+		}
 	}
 
 	return res.Body, nil
