@@ -75,17 +75,17 @@ var defaultFetchFunc fetchFunc = func(addr string) (io.ReadCloser, error) {
 }
 
 type linkCrawler struct {
-	initURL     *url.URL
-	maxRoutines uint
-	fetchFunc   fetchFunc
-	filterFunc  filterFunc
-	history     *history
-	sem         *sema.Sema
-	wg          *sync.WaitGroup
+	initURL    *url.URL
+	fetchFunc  fetchFunc
+	filterFunc filterFunc
+	history    *history
+	sem        *sema.Sema
+	wg         *sync.WaitGroup
 }
 
 func makeFilterFunc(config SearchConfig, initURL url.URL) filterFunc {
 	initHostname := initURL.Hostname()
+	initAddr := initURL.String()
 	return func(u url.URL) bool {
 		addr := u.String()
 		// Skip crap like this
@@ -95,6 +95,17 @@ func makeFilterFunc(config SearchConfig, initURL url.URL) filterFunc {
 
 		// Skip anchor links
 		if u.Hostname() == "" && u.EscapedPath() == "" && u.Fragment != "" {
+			return false
+		}
+
+		if u.Host == "" {
+			newurl := initURL.ResolveReference(&u)
+			u := *newurl
+			addr = u.String()
+		}
+
+		// TODO make this configurable
+		if !strings.HasPrefix(addr, initAddr) {
 			return false
 		}
 
@@ -265,13 +276,12 @@ func Crawl(ctx context.Context, initialAddr string, options ...Option) (<-chan S
 		sem = sema.NewSema(opt.MaxRoutines)
 	}
 	crawler := &linkCrawler{
-		initURL:     initURL,
-		maxRoutines: opt.MaxRoutines,
-		fetchFunc:   defaultFetchFunc,
-		filterFunc:  makeFilterFunc(opt.SearchConfig, *initURL),
-		history:     newHistory(),
-		wg:          &sync.WaitGroup{},
-		sem:         sem,
+		initURL:    initURL,
+		fetchFunc:  defaultFetchFunc,
+		filterFunc: makeFilterFunc(opt.SearchConfig, *initURL),
+		history:    newHistory(),
+		wg:         &sync.WaitGroup{},
+		sem:        sem,
 	}
 
 	outChan := make(chan SearchResult)
