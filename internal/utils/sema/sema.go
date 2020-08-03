@@ -1,16 +1,14 @@
 package sema
 
-type void struct{}
-
 // Sema represents a semaphore object
 type Sema struct {
 	rwLock chan bool
-	ch     chan void
+	ch     chan struct{}
 }
 
 // NewSema creates new semaphore object with given capacity
 func NewSema(capacity uint) *Sema {
-	ch := make(chan void, capacity)
+	ch := make(chan struct{}, capacity)
 	rwLock := make(chan bool, 1)
 	return &Sema{
 		ch:     ch,
@@ -32,7 +30,7 @@ func (sema *Sema) Len() int {
 func (sema *Sema) WaitToAcquire() {
 	defer recover()
 	sema.waitLock()
-	sema.ch <- void{}
+	sema.ch <- struct{}{}
 }
 
 // Release releases one unit of resource
@@ -58,12 +56,12 @@ func (sema *Sema) ReleaseAll() {
 func (sema *Sema) AllocMore(addedCapacity uint) {
 	curCap := sema.Cap()
 	newCap := uint(curCap) + addedCapacity
-	newChan := make(chan void, newCap)
+	newChan := make(chan struct{}, newCap)
 
 	sema.rwLock <- true
 	curLen := sema.Len()
 	for i := 0; i < curLen; i++ {
-		newChan <- void{}
+		newChan <- struct{}{}
 	}
 	sema.ch = newChan
 	<-sema.rwLock
