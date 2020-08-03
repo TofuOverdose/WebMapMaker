@@ -8,7 +8,9 @@ import (
 	"log"
 	"net/url"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/TofuOverdose/WebMapMaker/internal/linkcrawler"
@@ -72,7 +74,11 @@ func main() {
 
 	statusBar := gost.NewStatusBar(tr, pb, statsDisplay, timer)
 
-	resChan, err := linkcrawler.Crawl(context.Background(), inputData.TargetURL, inputData.Options...)
+	jobCtx, jobCancel := context.WithCancel(context.Background())
+	stopSigs := make(chan os.Signal)
+	signal.Notify(stopSigs, syscall.SIGINT, syscall.SIGTERM)
+
+	resChan, err := linkcrawler.Crawl(jobCtx, inputData.TargetURL, inputData.Options...)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -80,6 +86,71 @@ func main() {
 	statusBar.Run()
 
 	statusBar.Write([]byte("Started crawling the website"))
+
+	for {
+		select {
+		case <-stopSigs:
+			jobCancel()
+			statusBar.Close()
+			statusBar.Print("Aborted")
+			return
+		case res, ok := <-resChan:
+			if ok {
+				linkStats.TotalFoundCount++
+				if res.Error != nil {
+					linkStats.FailedCount++
+					msg := fmt.Sprintf("FAIL %s: %s", res.Addr, res.Error.Error())
+					//inputData.LogWriter.Write([]byte(msg))
+					_, err := statusBar.Write([]byte(msg))
+					if err != nil {
+						panic(err)
+					}
+				} else {
+					linkStats.AcceptedCount++
+					results = append(results, res)
+					if res.Hops > maxHops {
+						maxHops = res.Hops
+					}
+				}
+
+				// Update display data
+				statsDisplay.SetData(linkStats)
+			} else {
+				statusBar.Close()
+				statusBar.Write([]byte("Finished crawling. Building sitemap..."))
+				us := sitemap.NewUrlSet()
+
+				for _, res := range results {
+					priority := 1.0
+					if res.Hops > 0 {
+						priority = float64(res.Hops) / priority
+					}
+					us.AddUrl(*sitemap.NewUrl(res.Addr, "", "", priority))
+				}
+				// Open output file
+				f, err := os.Create(inputData.OutputPath)
+				if err != nil {
+					log.Fatal(err)
+					return
+				}
+				defer f.Close()
+
+				switch inputData.OutputType {
+				case "XML":
+					err = us.WriteXml(f)
+				case "TXT":
+					err = us.WritePlain(f)
+				}
+				if err != nil {
+					msg := fmt.Sprintf("FATAL: %s\n", err.Error())
+					inputData.LogWriter.Write([]byte(msg))
+					return
+				}
+				statusBar.Write([]byte(fmt.Sprintf("Sitemap saved to %s", inputData.OutputPath)))
+				return
+			}
+		}
+	}
 
 	for res := range resChan {
 		linkStats.TotalFoundCount++

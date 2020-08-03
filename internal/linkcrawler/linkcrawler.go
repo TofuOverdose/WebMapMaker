@@ -138,7 +138,7 @@ type SearchResult struct {
 	Error error
 }
 
-func (crawler *linkCrawler) visit(outChan chan SearchResult, url url.URL, hopsCount int) {
+func (crawler *linkCrawler) visit(url url.URL, hopsCount int, outChan chan SearchResult, doneChan <-chan struct{}) {
 	address := url.String()
 	if crawler.sem != nil {
 		crawler.sem.WaitToAcquire()
@@ -172,6 +172,8 @@ func (crawler *linkCrawler) visit(outChan chan SearchResult, url url.URL, hopsCo
 
 	for {
 		select {
+		case <-doneChan:
+			return
 		case link, ok := <-linksChan:
 			if !ok {
 				linksChan = nil
@@ -180,7 +182,7 @@ func (crawler *linkCrawler) visit(outChan chan SearchResult, url url.URL, hopsCo
 				next = crawler.initURL.ResolveReference(next)
 				if crawler.history.TryAdd(next.String()) {
 					crawler.wg.Add(1)
-					go crawler.visit(outChan, *next, hopsCount+1)
+					go crawler.visit(*next, hopsCount+1, outChan, doneChan)
 				}
 			}
 		case e, ok := <-errChan:
@@ -279,7 +281,7 @@ func Crawl(ctx context.Context, initialAddr string, options ...Option) (<-chan S
 
 	outChan := make(chan SearchResult)
 	crawler.wg.Add(1)
-	go crawler.visit(outChan, *initURL, 0)
+	go crawler.visit(*initURL, 0, outChan, ctx.Done())
 	go func() {
 		crawler.wg.Wait()
 		close(outChan)
