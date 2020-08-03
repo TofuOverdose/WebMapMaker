@@ -12,7 +12,7 @@ import (
 	"sync"
 
 	"github.com/TofuOverdose/WebMapMaker/internal/links"
-	"github.com/TofuOverdose/WebMapMaker/internal/utils"
+	"github.com/TofuOverdose/WebMapMaker/internal/utils/sema"
 )
 
 // SearchConfig specifies link acceptance critereas for crawler
@@ -72,7 +72,7 @@ type linkCrawler struct {
 	fetchFunc   fetchFunc
 	filterFunc  filterFunc
 	history     *history
-	sem         *utils.Sema
+	sem         *sema.Sema
 	wg          *sync.WaitGroup
 }
 
@@ -255,9 +255,9 @@ func Crawl(ctx context.Context, initialAddr string, options ...Option) (<-chan S
 		return nil, errors.New("Hostname is empty")
 	}
 
-	var sem *utils.Sema
+	var sem *sema.Sema
 	if opt.MaxRoutines > 0 {
-		sem = utils.NewSema(opt.MaxRoutines)
+		sem = sema.NewSema(opt.MaxRoutines)
 	}
 	crawler := &linkCrawler{
 		initURL:     initURL,
@@ -277,84 +277,4 @@ func Crawl(ctx context.Context, initialAddr string, options ...Option) (<-chan S
 		close(outChan)
 	}()
 	return outChan, nil
-}
-
-// includesTail checks if the "str" has "tail" substring on the right end
-func includesTail(str string, tail string) bool {
-	offset := strings.Index(str, tail)
-	if offset < 0 {
-		return false
-	}
-	if len(str)-offset == len(tail) {
-		return true
-	}
-	return false
-}
-
-// isSubdomain checks whether the domain in second string is a subdomain of the one in first string
-func isSubdomain(domain string, subdomain string) bool {
-	domain = strings.Replace(domain, "www.", "", 1)
-	subdomain = strings.Replace(subdomain, "www.", "", 1)
-	return includesTail(subdomain, domain)
-}
-
-// trimTopLevelDomain removes top level domain (".com", ".net", etc.) from domain name string
-func trimTopLevelDomain(domain string) string {
-	parts := strings.Split(domain, ".")
-	return strings.Join(parts[:len(parts)-1], ".")
-}
-
-// makeAbsoluteURL creates a copy of base URL with new path line
-func makeAbsoluteURL(base url.URL, path string) url.URL {
-	return url.URL{
-		Scheme:     base.Scheme,
-		Opaque:     base.Opaque,
-		Host:       base.Host,
-		Path:       path,
-		ForceQuery: base.ForceQuery,
-	}
-}
-
-func isCleanURL(u url.URL) bool {
-	return u.RawQuery == "" && u.Fragment == ""
-}
-
-// makeCleanURL removes query and anchor tag from URL
-func makeCleanURL(u *url.URL) *url.URL {
-	newURL, _ := url.Parse(u.String())
-	newURL.RawQuery = ""
-	newURL.Fragment = ""
-	return newURL
-}
-
-type history struct {
-	data map[string]bool
-	mut  sync.Mutex
-}
-
-func newHistory() *history {
-	return &history{
-		data: make(map[string]bool),
-	}
-}
-
-func (h *history) TryAdd(key string) bool {
-	h.mut.Lock()
-	defer h.mut.Unlock()
-	if _, has := h.data[key]; has {
-		return false
-	}
-
-	h.data[key] = true
-	return true
-}
-
-func (h *history) Entries() []string {
-	h.mut.Lock()
-	defer h.mut.Unlock()
-	entries := make([]string, 0, len(h.data))
-	for k := range h.data {
-		entries = append(entries, k)
-	}
-	return entries
 }
