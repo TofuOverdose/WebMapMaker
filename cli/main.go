@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math"
 	"net/url"
 	"os"
 	"os/signal"
@@ -123,9 +124,9 @@ func main() {
 				for _, res := range results {
 					priority := 1.0
 					if res.Hops > 0 {
-						priority = float64(res.Hops) / priority
+						priority = 1.0 / float64(res.Hops)
 					}
-					us.AddUrl(*sitemap.NewUrl(res.Addr, "", "", priority))
+					us.AddUrl(*sitemap.NewUrl(res.Addr, "", "", math.Round(priority*100)/100))
 				}
 				// Open output file
 				f, err := os.Create(inputData.OutputPath)
@@ -151,59 +152,6 @@ func main() {
 			}
 		}
 	}
-
-	for res := range resChan {
-		linkStats.TotalFoundCount++
-		if res.Error != nil {
-			linkStats.FailedCount++
-			msg := fmt.Sprintf("FAIL %s: %s", res.Addr, res.Error.Error())
-			//inputData.LogWriter.Write([]byte(msg))
-			_, err := statusBar.Write([]byte(msg))
-			if err != nil {
-				panic(err)
-			}
-		} else {
-			linkStats.AcceptedCount++
-			results = append(results, res)
-			if res.Hops > maxHops {
-				maxHops = res.Hops
-			}
-		}
-
-		// Update display data
-		statsDisplay.SetData(linkStats)
-	}
-	statusBar.Close()
-	statusBar.Write([]byte("Finished crawling. Building sitemap..."))
-	us := sitemap.NewUrlSet()
-
-	for _, res := range results {
-		priority := 1.0
-		if res.Hops > 0 {
-			priority = float64(res.Hops) / priority
-		}
-		us.AddUrl(*sitemap.NewUrl(res.Addr, "", "", priority))
-	}
-	// Open output file
-	f, err := os.Create(inputData.OutputPath)
-	if err != nil {
-		log.Fatal(err)
-		return
-	}
-	defer f.Close()
-
-	switch inputData.OutputType {
-	case "XML":
-		err = us.WriteXml(f)
-	case "TXT":
-		err = us.WritePlain(f)
-	}
-	if err != nil {
-		msg := fmt.Sprintf("FATAL: %s\n", err.Error())
-		inputData.LogWriter.Write([]byte(msg))
-		return
-	}
-	statusBar.Write([]byte(fmt.Sprintf("Sitemap saved to %s", inputData.OutputPath)))
 }
 
 func getInputData() (*InputData, error) {

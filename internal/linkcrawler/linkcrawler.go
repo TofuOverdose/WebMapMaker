@@ -98,11 +98,6 @@ func makeFilterFunc(config SearchConfig, initURL url.URL) filterFunc {
 			return false
 		}
 
-		// Pass relative links
-		if u.Host == "" {
-			return true
-		}
-
 		// By default, URLs with query and anchor will be ignored
 		// Not sure this is a right decision but at the moment I figured that it's certainly wrong to modify the URL assuming there should be path without query.
 		// If this assumption is true, such URL will probably be linked from some other place and eventually will be found some time later anyway.
