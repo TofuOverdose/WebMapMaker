@@ -1,5 +1,7 @@
 package gost
 
+// Gost is a pretty widget-based Go status bar (very original naming, ikr)
+
 import (
 	"bytes"
 	"fmt"
@@ -134,6 +136,8 @@ func (sb StatusBar) Printf(format string, a ...interface{}) (n int, err error) {
 	return sb.WriteString(fmt.Sprintf(format, a...))
 }
 
+// Close disables the display of status bar
+// Though writing (with Write or Print* functions) is still possible
 func (sb *StatusBar) Close() {
 	sb.disabled = true
 }
@@ -141,7 +145,7 @@ func (sb *StatusBar) Close() {
 // Widget is an interface that progress bar can consume to render it on itself
 type Widget interface {
 	// SetData updates some related data to be used for rendering
-	// Not every Widget can consume data though, so behavior migth be undefined for this method
+	// Not every Widget can consume data though, so behavior migth be undefined for some particular implementations
 	SetData(data interface{})
 	render() (string, error)
 }
@@ -303,6 +307,7 @@ func NewBouncer(lineLen int, charSet BouncerCharSet) *Bouncer {
 	}
 }
 
+// TimeFormatter is any function that transforms time.Duration to some pretty format
 type TimeFormatter func(time.Duration) string
 
 const (
@@ -349,6 +354,7 @@ type timerCongif struct {
 	}
 }
 
+// TimerOption allows to configure behavior of Timer
 type TimerOption func() func(timer *Timer)
 
 // TimerOptionsStartImmediately - set val to TRUE to start counting before the first render
