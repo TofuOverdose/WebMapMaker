@@ -9,13 +9,14 @@ import (
 	"golang.org/x/net/html"
 )
 
+// Link is a structure for holding named URLs
 type Link struct {
 	Name string
-	Url  url.URL
+	URL  url.URL
 }
 
 func (link *Link) String() string {
-	return link.Name + " " + link.Url.String()
+	return link.Name + " " + link.URL.String()
 }
 
 func parseHref(linkNode *html.Node) string {
@@ -27,6 +28,7 @@ func parseHref(linkNode *html.Node) string {
 	return ""
 }
 
+// LinkParseError is passed when parsing of href on <a> tag fails
 type LinkParseError struct {
 	Node html.Node
 	Href string
@@ -57,7 +59,7 @@ func seekLinkNodes(node *html.Node, outChan chan Link, errChan chan LinkParseErr
 				}
 				outChan <- Link{
 					Name: name,
-					Url:  *url,
+					URL:  *url,
 				}
 			}
 		}
@@ -68,6 +70,7 @@ func seekLinkNodes(node *html.Node, outChan chan Link, errChan chan LinkParseErr
 	}
 }
 
+// FindLinks parses HTML page passed by reader and finds all successfully found links in <a> tags through channel
 func FindLinks(reader io.Reader) (<-chan Link, <-chan LinkParseError, error) {
 	node, err := html.Parse(reader)
 	if err != nil {

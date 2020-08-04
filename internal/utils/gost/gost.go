@@ -1,7 +1,5 @@
 package gost
 
-// Dedicated to Pauly, the love of my life ❤️
-
 import (
 	"bytes"
 	"fmt"

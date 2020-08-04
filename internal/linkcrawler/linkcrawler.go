@@ -23,6 +23,7 @@ type SearchConfig struct {
 	ExcludedPaths         []string
 }
 
+// FetchError carries data about HTTP response with 4xx or 5xx status codes
 type FetchError struct {
 	Code         int
 	Status       string
@@ -189,7 +190,7 @@ func (crawler *linkCrawler) visit(url url.URL, hopsCount int, outChan chan Searc
 			if !ok {
 				linksChan = nil
 			}
-			if next := &link.Url; crawler.filterFunc(link.Url) {
+			if next := &link.URL; crawler.filterFunc(link.URL) {
 				next = crawler.initURL.ResolveReference(next)
 				if crawler.history.TryAdd(next.String()) {
 					crawler.wg.Add(1)
@@ -262,7 +263,6 @@ func OptionSearchIgnorePaths(patterns ...string) Option {
 // initialAddr must be full URL string with protocol without path, query string or anchor
 // options is a slice of functional options from this package (functions starting with Option*) to configure the behavior of the crawler
 func Crawl(ctx context.Context, initialAddr string, options ...Option) (<-chan SearchResult, error) {
-	// TODO take ctx into account
 	opt := CrawlOptions{}
 	for _, o := range options {
 		o(&opt)
