@@ -86,7 +86,7 @@ func main() {
 
 	statusBar.Run()
 
-	statusBar.Write([]byte("Started crawling the website"))
+	statusBar.Print("Started crawling the website")
 
 	for {
 		select {
@@ -100,9 +100,7 @@ func main() {
 				linkStats.TotalFoundCount++
 				if res.Error != nil {
 					linkStats.FailedCount++
-					msg := fmt.Sprintf("FAIL %s: %s", res.Addr, res.Error.Error())
-					//inputData.LogWriter.Write([]byte(msg))
-					_, err := statusBar.Write([]byte(msg))
+					_, err := statusBar.Printf("%s: %s", res.Addr, res.Error.Error())
 					if err != nil {
 						panic(err)
 					}
@@ -118,7 +116,7 @@ func main() {
 				statsDisplay.SetData(linkStats)
 			} else {
 				statusBar.Close()
-				statusBar.Write([]byte("Finished crawling. Building sitemap..."))
+				statusBar.Print("Finished crawling. Building sitemap...")
 				us := sitemap.NewUrlSet()
 
 				for _, res := range results {
@@ -147,7 +145,7 @@ func main() {
 					inputData.LogWriter.Write([]byte(msg))
 					return
 				}
-				statusBar.Write([]byte(fmt.Sprintf("Sitemap saved to %s", inputData.OutputPath)))
+				statusBar.Printf("Sitemap saved to %s", inputData.OutputPath)
 				return
 			}
 		}

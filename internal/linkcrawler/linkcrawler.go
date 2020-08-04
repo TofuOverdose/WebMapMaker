@@ -32,7 +32,12 @@ type FetchError struct {
 }
 
 func (fe *FetchError) Error() string {
-	return fmt.Sprintf("Fetch error from %s (original request for %s): %s", fe.RequestURLs[len(fe.RequestURLs)-1], fe.RequestURLs[0], fe.Status)
+	firstReq := fe.RequestURLs[0]
+	lastReq := fe.RequestURLs[len(fe.RequestURLs)-1]
+	if firstReq != lastReq {
+		return fmt.Sprintf("Fetch error from %s (original request for %s): %s", lastReq, firstReq, fe.Status)
+	}
+	return fmt.Sprintf("Fetch error from %s: %s", lastReq, fe.Status)
 }
 
 type fetchFunc func(string) (io.ReadCloser, error)
