@@ -22,9 +22,6 @@ type StatusBar struct {
 	disabled bool
 }
 
-const ticksChanCapacity = 10
-const stateChanTotalCapacity = 100
-
 // NewStatusBar makes a new status bar with desired UI and settings
 func NewStatusBar(tickRate time.Duration, widgets ...Widget) *StatusBar {
 	return &StatusBar{
