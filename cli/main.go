@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"math"
 	"net/url"
 	"os"
 	"os/signal"
@@ -36,7 +35,6 @@ func main() {
 	defer inputData.LogWriter.Close()
 
 	results := make([]linkcrawler.SearchResult, 0)
-	maxHops := 0
 
 	// Configuring CLI
 	type linksDisplayStats struct {
@@ -100,31 +98,21 @@ func main() {
 				linkStats.TotalFoundCount++
 				if res.Error != nil {
 					linkStats.FailedCount++
-					_, err := statusBar.Printf("%s: %s", res.Addr, res.Error.Error())
-					if err != nil {
-						panic(err)
-					}
+					statusBar.Printf("%s: %s", res.Addr, res.Error.Error())
 				} else {
 					linkStats.AcceptedCount++
 					results = append(results, res)
-					if res.Hops > maxHops {
-						maxHops = res.Hops
-					}
 				}
 
 				// Update display data
 				statsDisplay.SetData(linkStats)
 			} else {
-				statusBar.Close()
+				//statusBar.Close()
 				statusBar.Print("Finished crawling. Building sitemap...")
 				us := sitemap.NewUrlSet()
 
 				for _, res := range results {
-					priority := 1.0
-					if res.Hops > 0 {
-						priority = 1.0 / float64(res.Hops)
-					}
-					us.AddUrl(*sitemap.NewUrl(res.Addr, "", "", math.Round(priority*100)/100))
+					us.AddUrl(*sitemap.NewUrl(res.Addr, "", "", 0.0))
 				}
 				// Open output file
 				f, err := os.Create(inputData.OutputPath)
@@ -156,56 +144,41 @@ func getInputData() (*InputData, error) {
 	inputData := InputData{}
 
 	// First define the flags
-	reqTargetURL := flag.String("t", "", "Target URL to start crawling from")
-	reqOutputPath := flag.String("o", "", "Output file (either .txt or .xml)")
-	reqLogFile := flag.String("log", "", "Path to log file")
-	// Set up the crawler options based on the received flags
-	optMaxRoutines := flag.Int("maxRoutines", 0, "Set positive number to limit the number of spawned goroutines")
-	optSearchIgnoreTopLevelDomain := flag.Bool("ignoreTopLevelDomain", true, "Set FALSE to include links with different top level domains (e.g. website.foo and website.bar)")
-	optSearchAllowQuery := flag.Bool("includeWithQuery", false, "Set TRUE to include links with queries")
-	optSearchIncludeSubdomains := flag.Bool("includeSubdomains", false, "Set TRUE to include links to subdomains of the target URL")
-	optSearchIgnorePaths := flag.String("ignoredPaths", "", "Path substrings to ignore separated by semicolon")
+	pTargetURL := flag.String("t", "", "Target URL to start crawling from")
+	pOutputPath := flag.String("o", "", "Output file (either TXT or XML)")
+	pLogFile := flag.String("log", "", "Path to log file")
+	pMaxRoutines := flag.Int("mr", 0, "Set positive number to limit the number of spawned goroutines")
+	pSearchOpts := flag.String("sp", "", "Search rules for crawler separated by commas. Available options: ignoreTopLevelDomain, includeWithQuery, includeSubdomains")
 	// Then run the parser
 	flag.Parse()
 	// Validation for the received flags
-	if err := validateURL(*reqTargetURL); err != nil {
+	if err := validateURL(*pTargetURL); err != nil {
 		return nil, err
 	}
-	inputData.TargetURL = *reqTargetURL
+	inputData.TargetURL = *pTargetURL
 
-	if ot, err := checkOutputFile(*reqOutputPath, []string{"XML", "TXT"}); err != nil {
+	if ot, err := checkOutputFile(*pOutputPath, []string{"XML", "TXT"}); err != nil {
 		return nil, err
 	} else {
-		inputData.OutputPath = *reqOutputPath
+		inputData.OutputPath = *pOutputPath
 		inputData.OutputType = ot
 	}
 
-	if wc, err := getWriteCloser(*reqLogFile); err != nil {
+	if wc, err := getWriteCloser(*pLogFile); err != nil {
 		return nil, err
 	} else {
 		inputData.LogWriter = wc
 	}
 
 	options := make([]linkcrawler.Option, 0)
-	if *optMaxRoutines > -1 {
-		options = append(options, linkcrawler.OptionMaxRoutines(uint(*optMaxRoutines)))
+	if *pMaxRoutines > 0 {
+		options = append(options, linkcrawler.OptionMaxRoutines(uint(*pMaxRoutines)))
 	}
-	if *optSearchIgnoreTopLevelDomain {
-		options = append(options, linkcrawler.OptionSearchIgnoreTopLevelDomain())
+	searchOptions, err := parseSearchOptions(*pSearchOpts)
+	if err != nil {
+		return nil, err
 	}
-	if *optSearchAllowQuery {
-		options = append(options, linkcrawler.OptionSearchAllowQuery())
-	}
-	if *optSearchIncludeSubdomains {
-		options = append(options, linkcrawler.OptionSearchIncludeSubdomains())
-	}
-	if *optSearchIgnorePaths != "" {
-		paths := strings.Split(*optSearchIgnorePaths, ";")
-		for i, p := range paths {
-			paths[i] = strings.ReplaceAll(p, `"`, "")
-		}
-		options = append(options, linkcrawler.OptionSearchIgnorePaths(paths...))
-	}
+	options = append(options, searchOptions...)
 	inputData.Options = options
 
 	return &inputData, nil
@@ -278,4 +251,25 @@ func validateURL(urlString string) error {
 	}
 
 	return nil
+}
+
+func parseSearchOptions(input string) ([]linkcrawler.Option, error) {
+	if input == "" {
+		return nil, nil
+	}
+	options := make([]linkcrawler.Option, 0)
+	input = strings.ReplaceAll(input, " ", "")
+	for _, opt := range strings.Split(input, ",") {
+		switch opt {
+		case "ignoreTopLevelDomain":
+			options = append(options, linkcrawler.OptionSearchIgnoreTopLevelDomain())
+		case "includeWithQuery":
+			options = append(options, linkcrawler.OptionSearchAllowQuery())
+		case "includeSubdomains":
+			options = append(options, linkcrawler.OptionSearchIncludeSubdomains())
+		default:
+			return nil, fmt.Errorf("Unsupported search option: %s", opt)
+		}
+	}
+	return options, nil
 }

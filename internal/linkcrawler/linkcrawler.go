@@ -90,7 +90,7 @@ type linkCrawler struct {
 }
 
 func makeFilterFunc(config SearchConfig, initURL url.URL) filterFunc {
-	initHostname := initURL.Hostname()
+	initHostname := initURL.Host
 	initAddr := initURL.String()
 	return func(u url.URL) bool {
 		addr := u.String()
@@ -100,17 +100,17 @@ func makeFilterFunc(config SearchConfig, initURL url.URL) filterFunc {
 		}
 
 		// Skip anchor links
-		if u.Hostname() == "" && u.EscapedPath() == "" && u.Fragment != "" {
+		if u.Host == "" && u.EscapedPath() == "" && u.Fragment != "" {
 			return false
 		}
 
 		if u.Host == "" {
 			newurl := initURL.ResolveReference(&u)
-			u := *newurl
+			u = *newurl
 			addr = u.String()
 		}
 
-		// TODO make this configurable
+		//TODO make this configurable
 		if !strings.HasPrefix(addr, initAddr) {
 			return false
 		}
@@ -129,7 +129,7 @@ func makeFilterFunc(config SearchConfig, initURL url.URL) filterFunc {
 			}
 		}
 
-		hn := u.Hostname()
+		hn := u.Host
 		if config.IgnoreTopLevelDomain {
 			hn = trimTopLevelDomain(hn)
 			initHostname = trimTopLevelDomain(initHostname)
