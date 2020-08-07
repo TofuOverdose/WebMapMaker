@@ -41,12 +41,15 @@ func (fe *FetchError) Error() string {
 	return fmt.Sprintf("Fetch error from %s: %s", lastReq, fe.Status)
 }
 
+// fetchFunc takes url string and returns the body of the requested page
 type fetchFunc func(string) (io.ReadCloser, error)
 
+// filterFunc decides whether or not the received url should be passed based on certain criterias
 type filterFunc func(url.URL) bool
 
 const defaultMaxRedirects = 10
 
+// implementation of fetchFunc that uses http package from standard library for fetching static pages
 var defaultFetchFunc fetchFunc = func(addr string) (io.ReadCloser, error) {
 	reCount := 0
 	urls := []string{addr}
@@ -80,15 +83,24 @@ var defaultFetchFunc fetchFunc = func(addr string) (io.ReadCloser, error) {
 	return res.Body, nil
 }
 
+// linkCrawler is the main 'context' of operations
 type linkCrawler struct {
-	initURL    *url.URL
-	fetchFunc  fetchFunc
+	// links hrefs need to be compared with the initial url
+	initURL *url.URL
+	// fetchFunc encapsulates data fetching and should be configurable (for example, it might implement adapter for headless browser to fetch data from SPAs)
+	fetchFunc fetchFunc
+	// I thought it's also pretty convinient to keep filtering strategy separate
 	filterFunc filterFunc
-	history    *history
-	sem        *sema.Sema
-	wg         *sync.WaitGroup
+	// history is a hash map holding all previously visited urls to prevent going through it again. See ./helpers.go
+	history *history
+	// Semaphore for limiting the amount of goroutines running simultaneously. On each visit goroutine tries to access a resource from semaphore and waits till it's available.
+	// Might be null if limit is not set
+	sem *sema.Sema
+	// waitGroup to await finishing of all goroutines from the main function
+	wg *sync.WaitGroup
 }
 
+// makeFilterFunc is a default factory for filterFunc for linkCrawler
 func makeFilterFunc(config SearchConfig, initURL url.URL) filterFunc {
 	initHostname := initURL.Host
 	initAddr := initURL.String()
@@ -150,8 +162,10 @@ type SearchResult struct {
 	Error error
 }
 
+// this function gets called recursively for each link found on html page
 func (crawler *linkCrawler) visit(url url.URL, hopsCount int, outChan chan SearchResult, doneChan <-chan struct{}) {
 	address := url.String()
+	// Wait for available resource from semaphore and release it after
 	if crawler.sem != nil {
 		crawler.sem.WaitToAcquire()
 	}
@@ -259,7 +273,7 @@ func OptionSearchIgnorePaths(patterns ...string) Option {
 	}
 }
 
-// Crawl starts crawling the website to find all external links
+// Crawl initiates website crawling to find all internal links
 // initialAddr must be full URL string with protocol without path, query string or anchor
 // options is a slice of functional options from this package (functions starting with Option*) to configure the behavior of the crawler
 func Crawl(ctx context.Context, initialAddr string, options ...Option) (<-chan SearchResult, error) {
