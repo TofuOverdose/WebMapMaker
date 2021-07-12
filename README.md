@@ -2,9 +2,9 @@
 WebMapMaker is a simple tool for automatic building of sitemaps for your websites in xml or txt written in Go
 
 ## CLI usage
-Build the binary with **go build**, then execute it with the following arguments:
+Build the binary with **make build**, then execute it with the following arguments:
 ```
-./webmapmaker -t="https://google.com" -o="out.xml"
+./bin/makemap -t="https://example.com" -o="out.xml"
 ```
 where **-t** is the target website from which to start crawling and **-o** is the output file (the file extension is required and must be either .xml or .txt) 
 Other available arguments:
@@ -14,4 +14,6 @@ Other available arguments:
     * **includeWithQuery** - by default, all links with query strings will be ignored. This options allows to visit such links as well.
     * **includeSubdomains** - when this options is set, pages on subdomains will be included in the results. For example, if the initial domain is foo.com, links to domains bar.foo.com or baz.foo.com will be crawled. 
 
-
+## Known issues:
+- [] The tool never exits on some websites;
+- [] CLI progress bar prints new frames on new line instead of rewriting old one when the output does not fit in one line in terminal window; 
