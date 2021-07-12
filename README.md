@@ -1,5 +1,5 @@
 # WebMapMaker
-WebMapMaker is a simple tool for automatic building of sitemaps for your websites in xml or txt written in Go
+WebMapMaker is a simple tool that crawls your website to build its sitemap in xml or txt format.
 
 ## CLI usage
 Build the binary with **make build**, then execute it with the following arguments:
